@@ -73,7 +73,7 @@ window.ExportStudio.registerAction = function(key, callbackFn) {
 };
 
 /**
- * Patch 1 & 2: Structural Finalization Bootstrapper.
+ * Structural Finalization Bootstrapper.
  * Freezes Registry, Synonyms, and Categories objects recursively to make them strictly immutable.
  */
 window.ExportStudio.freezeArchitectureCore = function() {
@@ -285,8 +285,6 @@ function renderExportDashboard(filterText) {
 
 /**
  * Central event wrapper mapping for dashboard query changes.
- * Patch 3: Implemented 180ms Debounce Throttle to optimize keystroke execution loops.
- * @param {string} val - Input character value capture profiles.
  */
 function filterExportCards(val) {
   if (searchDebounceTimer) {
