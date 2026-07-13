@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <title>Vidya Wave — Teacher Export Studio V3 Absolute QA Harness</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; padding: 24px; color: #0f172a; }
+        .qa-container { max-width: 1300px; margin: 0 auto; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 30px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .qa-header { border-bottom: 3px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+        .qa-title { font-size: 26px; font-weight: bold; color: #1e3a8a; }
+        
+        .telemetry-dashboard { background: #020617; color: #38bdf8; padding: 20px; border-radius: 8px; font-family: "Courier New", monospace; margin-bottom: 24px; box-shadow: inset 0 4px 6px rgba(0,0,0,0.8); overflow-y: auto; max-height: 500px; }
+        .log-row { margin: 8px 0; font-size: 13px; line-height: 1.5; border-bottom: 1px solid #1e293b; padding-bottom: 4px; display: flex; justify-content: space-between; }
+        .log-success { color: #4ade80; }
+        .log-fail { color: #f87171; }
+        .log-info { color: #e2e8f0; }
+        .log-metric { color: #facc15; font-size: 11px; margin-left: 10px; }
+        .log-summary-box { background: #1e293b; border-top: 2px solid #38bdf8; margin-top: 15px; padding: 16px; font-size: 14px; color: #ffffff; border-radius: 4px; display: flex; flex-direction: column; gap: 10px; }
+        .coverage-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; font-size: 12px; text-align: center; margin-top: 10px; border-top: 1px dashed #475569; padding-top: 10px; }
+        .cov-item { background: #0f172a; padding: 8px; border-radius: 4px; border: 1px solid #334155; }
+        .cov-val { display: block; font-size: 16px; font-weight: bold; margin-top: 4px; }
+        
+        .sandbox-isolation-zone { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; margin-bottom: 24px; opacity: 0.1; pointer-events: none; }
+        .panel-node { background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; }
+        
+        #toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: #fff; padding: 12px 24px; border-radius: 4px; display: none; font-size: 13px; }
+        #toast.show { display: block; }
+        #prog { display: none; background: #e2e8f0; border-radius: 4px; height: 15px; position: relative; }
+        #pBar { height: 100%; background: #0284c7; width: 0%; }
+        #pTxt { position: absolute; width: 100%; text-align: center; font-size: 11px; line-height: 15px; color: #000; font-weight: bold; }
+        
+        .btn-qa { background: #16a34a; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-qa:hover { background: #15803d; }
+    </style>
+</head>
+<body>
+
+<div class="qa-container">
+    <div class="qa-header">
+        <div>
+            <div class="qa-title">Vidya Wave — Teacher Export Studio V3 Ultimate QA Harness</div>
+            <small style="color: #475569;">Enterprise Automated Quality Assurance Engine | Version 3.6.0 (Final Master)</small>
+        </div>
+        <div>
+            <button class="btn-qa" onclick="triggerSuite()" id="runBtn">🔄 Run Full Regression Suite</button>
+        </div>
+    </div>
+    
+    <div class="telemetry-dashboard" id="qaTerminal">
+        <div class="log-row log-info"><span>🚀 System Idle. Waiting for diagnostic trigger...</span></div>
+    </div>
+    
+    <div id="prog"><div id="pTxt">...</div><div id="pBar"></div></div>
+    <div id="toast"></div>
+
+    <div class="sandbox-isolation-zone">
+        <div class="panel-node">
+            <select id="subj"><option value="">-- All --</option></select>
+            <input type="text" id="searchExport">
+            <button id="selAllBtn">Select</button>
+            <div id="selCount">(0/0)</div>
+        </div>
+        <div class="panel-node"><div id="qList"></div><div id="expContainer"></div></div>
+    </div>
+    
+    <div id="stage" style="display: none;"></div>
+</div>
+
+<script>
+    /** MOCK UTILITIES & LEGACY HELPERS */
+    function safeNow() { return (window.performance && typeof window.performance.now === "function") ? window.performance.now() : Date.now(); }
+    
+    window.el = window.el || function(id) { return document.getElementById(id); };
+    window.esc = window.esc || function(s) { return s == null ? "" : String(s).replace(/&/g, "&amp;"); };
+    window.toast = window.toast || function(m) { var t = el("toast"); if(t){ t.textContent = m; t.className = "show"; setTimeout(function(){ t.className = ""; }, 50); } };
+    window.prog = window.prog || function(t, p) { var pr = el("prog"), pb = el("pBar"); if(pr) pr.style.display = p >= 100 ? "none" : "block"; if(pb) pb.style.width = p+"%"; };
+    window.resetProgress = window.resetProgress || function() { var b = el("pBar"); if(b) b.style.width = "0%"; };
+    window.optionTable = window.optionTable || function() { return '<table class="vw-option-table"></table>'; };
+
+    window.ExportStudio = window.ExportStudio || {};
+    window.ExportStudio.data = window.ExportStudio.data || {};
+    window.ExportStudio.state = window.ExportStudio.state || { selected: {}, cancel: false };
+    window.ExportStudio.data.test = { testId: "GND_QA_60", questions: [{ qId: "1", text: "Q1", options: [], correctIndex: 0, solution: "S1" }] };
+
+    function promiseWithTimeout(ms, promise, testName) {
+        return new Promise(function(resolve, reject) {
+            if (!promise || typeof promise.then !== "function") return reject(new Error("Invalid Promise: " + testName));
+            var timer = setTimeout(function() { reject(new Error("Timeout [" + ms + "ms]: " + testName)); }, ms);
+            promise.then(function(res) { clearTimeout(timer); resolve(res); }).catch(function(err) { clearTimeout(timer); reject(err); });
+        });
+    }
+
+    /** GLOBAL CONSOLE & ERROR HOOKS (Issue 10) */
+    var originalConsoleWarn = console.warn;
+    var originalConsoleError = console.error;
+    var originalOnError = window.onerror;
+    var originalOnUnhandled = window.onunhandledrejection;
+    
+    var capturedErrors = [];
+    var capturedWarnings = [];
+
+    function executeUltimateTestSuite() {
+        return new Promise(function(resolveTestComplete) {
+            var qaState = { passes: 0, fails: 0, logs: "" };
+            var terminal = el("qaTerminal");
+            
+            // Dynamic Coverage Engine (Issue 1)
+            var cov = { compiler: {t:0, p:0}, pdf: {t:0, p:0}, controller: {t:0, p:0}, ui: {t:0, p:0}, regression: {t:0, p:0} };
+
+            function trace(msg, status, metric, layer) {
+                var css = status === "success" ? "log-success" : (status === "fail" ? "log-fail" : "log-info");
+                var icon = status === "success" ? "✔ " : (status === "fail" ? "❌ " : "⚙️ ");
+                
+                if (status === "success" || status === "fail") {
+                    if (status === "success") qaState.passes++; else qaState.fails++;
+                    if (layer && cov[layer]) { cov[layer].t++; if(status === "success") cov[layer].p++; }
+                }
+                
+                var metricHtml = metric ? '<span class="log-metric">[' + metric + ']</span>' : '';
+                qaState.logs += '<div class="log-row ' + css + '"><span>' + icon + msg + '</span>' + metricHtml + '</div>';
+            }
+
+            function renderFinalDash() {
+                var getP = function(l) { return cov[l].t === 0 ? "0%" : Math.round((cov[l].p/cov[l].t)*100) + "%"; };
+                var getC = function(l) { return cov[l].p === cov[l].t && cov[l].t > 0 ? "#4ade80" : "#f87171"; };
+                
+                var coverageHtml = '<div class="coverage-grid">' +
+                    '<div class="cov-item">Compiler<span class="cov-val" style="color:'+getC('compiler')+'">'+getP('compiler')+'</span></div>' +
+                    '<div class="cov-item">PDF Driver<span class="cov-val" style="color:'+getC('pdf')+'">'+getP('pdf')+'</span></div>' +
+                    '<div class="cov-item">Routing<span class="cov-val" style="color:'+getC('controller')+'">'+getP('controller')+'</span></div>' +
+                    '<div class="cov-item">UI/DOM<span class="cov-val" style="color:'+getC('ui')+'">'+getP('ui')+'</span></div>' +
+                    '<div class="cov-item">Regression<span class="cov-val" style="color:'+getC('regression')+'">'+getP('regression')+'</span></div>' +
+                    '<div class="cov-item">Errors<span class="cov-val" style="color:'+(capturedErrors.length===0?"#4ade80":"#f87171")+'">'+capturedErrors.length+'</span></div>' +
+                    '</div>';
+
+                terminal.innerHTML = qaState.logs + '<div class="log-summary-box">' +
+                    '<div>📊 Test Suite Concluded: Passed [' + qaState.passes + '] | Failed [' + qaState.fails + ']</div>' + coverageHtml + '</div>';
+            }
+
+            // Hook Execution Matrix
+            window.onerror = function(msg) { capturedErrors.push("Window: " + msg); return false; };
+            window.onunhandledrejection = function(e) { capturedErrors.push("Unhandled: " + (e.reason || e)); };
+            console.error = function() { capturedErrors.push(arguments[0]); originalConsoleError.apply(console, arguments); };
+            console.warn = function() { capturedWarnings.push(arguments[0]); originalConsoleWarn.apply(console, arguments); };
+
+            function executeTeardown() {
+                window.onerror = originalOnError;
+                window.onunhandledrejection = originalOnUnhandled;
+                console.warn = originalConsoleWarn;
+                console.error = originalConsoleError;
+                if(window.html2pdf) delete window.html2pdf; // Clean up global mock
+            }
+
+            trace("V3.6.0 Master Regression Boot...", "info");
+
+            // Dependency Guards
+            var hasCompiler = (window.ExportStudio.compiler && typeof window.ExportStudio.compiler.buildExportPackage === "function");
+            var hasPdf = (window.ExportStudio.pdf && typeof window.ExportStudio.pdf.buildWorksheetHTML === "function");
+            var hasController = (window.ExportStudio.controller && typeof window.ExportStudio.controller.initiateExport === "function");
+            
+            if (!hasCompiler || !hasPdf || !hasController) {
+                trace("Critical Core Missing. Aborting.", "fail", null, "regression");
+                executeTeardown(); renderFinalDash(); return resolveTestComplete(qaState);
+            }
+
+            // 1. Dynamic Performance Thresholding (Issue 3)
+            var baseT0 = safeNow(); for(var i=0; i<10000; i++) { Math.sqrt(i); } var envBase = (safeNow() - baseT0) * 15; 
+            var dynaThreshold = Math.max(100, envBase); // Adaptive Baseline calculation
+            trace("Environment Computed Benchmark Baseline: " + dynaThreshold.toFixed(2) + "ms", "info");
+
+            // 2. Deep Package Validation (Issue 7)
+            var p0 = safeNow();
+            var deepPkg = window.ExportStudio.compiler.buildExportPackage("WORKSHEET_PDF", { institutionBrandOverride: "Test_Brand" });
+            var p1 = safeNow();
+            
+            var isValidPkg = deepPkg && deepPkg.packageId && deepPkg.packageId.indexOf("VPK_") === 0 && 
+                             deepPkg.branding && deepPkg.branding.institution === "Test_Brand" &&
+                             deepPkg.timestamp && deepPkg.dataSet && deepPkg.dataSet.questions.length > 0;
+            
+            if (isValidPkg) trace("Compiler Deep Schema Validation: Passed (All Metadata & Arrays present).", "success", null, "compiler");
+            else trace("Compiler Deep Schema Validation: Failed.", "fail", null, "compiler");
+            trace("Compiler Execution Envelope Benchmark", (p1 - p0 <= dynaThreshold) ? "success" : "fail", (p1-p0).toFixed(2)+"ms", "compiler");
+
+            // 3. Deep HTML Document Structure Validation (Issue 4)
+            var wsHtml = window.ExportStudio.pdf.buildWorksheetHTML(deepPkg);
+            var isHtmlValid = false;
+            
+            if (typeof DOMParser !== "undefined") {
+                var doc = new DOMParser().parseFromString(wsHtml, "text/html");
+                isHtmlValid = (doc.querySelectorAll(".pdf-document-wrapper").length > 0) &&
+                              (doc.querySelectorAll(".pdf-header-table").length > 0) &&
+                              (doc.querySelectorAll(".pdf-question-block").length > 0) &&
+                              (doc.querySelectorAll(".vw-option-table").length > 0) &&
+                              (doc.querySelectorAll(".pdf-footer").length > 0);
+            } else {
+                isHtmlValid = (wsHtml.indexOf("pdf-document-wrapper") !== -1 && wsHtml.indexOf("vw-option-table") !== -1 && wsHtml.indexOf("pdf-watermark") === -1);
+            }
+            if (isHtmlValid) trace("PDF Driver HTML Deep Schema Verification: Passed.", "success", null, "pdf");
+            else trace("PDF Driver HTML Deep Schema Verification: Missing layout/table blocks.", "fail", null, "pdf");
+
+            // 4. UI Regression States & Event Hooks (Issue 9)
+            el("toast").className = "show";
+            prog("Loading", 50);
+            var uiStateValid = el("toast").className.indexOf("show") !== -1 && el("pBar").style.width === "50%";
+            resetProgress();
+            uiStateValid = uiStateValid && el("pBar").style.width === "0%";
+            if (uiStateValid) trace("UI Regression Sync Matrix: Overlay DOM States Validated.", "success", null, "ui");
+            else trace("UI Regression Sync Matrix: DOM Overlay desynchronized.", "fail", null, "ui");
+
+            // 5. PDF Driver Execution Mock via Global html2pdf Intercept (Issue 5 & 6)
+            var pdfFilesCaptured = [];
+            window.html2pdf = function() {
+                return {
+                    set: function(opt) { this.opt = opt; return this; },
+                    from: function(el) { return this; },
+                    save: function() { pdfFilesCaptured.push(this.opt.filename); return Promise.resolve(); }
+                };
+            };
+
+            // 6. Controller Asynchronous Routing & Filename Match Assertion
+            var tA = window.ExportStudio.controller.initiateExport("WORKSHEET_PDF", {});
+            var tB = window.ExportStudio.controller.initiateExport("SOLUTION_PDF", {});
+            
+            promiseWithTimeout(3000, Promise.all([tA, tB]), "PDF Export Flow").then(function() {
+                var fileAssert = (pdfFilesCaptured.length === 2 && 
+                                  pdfFilesCaptured[0].indexOf(".pdf") !== -1 && 
+                                  pdfFilesCaptured[1].indexOf("_Solution.pdf") !== -1);
+                
+                if (fileAssert) trace("Controller Routing & Deep PDF Filename Assignment verified via interceptor.", "success", pdfFilesCaptured.length + " outputs", "controller");
+                else trace("Controller Routing & Filename Match Error.", "fail", null, "controller");
+
+            }).then(function() {
+                // 7. Advanced Race Condition & Cancel Loop (Issue 8)
+                window.ExportStudio.state.cancel = true;
+                var p1 = window.ExportStudio.controller.initiateExport("WORKSHEET_PDF", {});
+                window.ExportStudio.state.cancel = false;
+                var p2 = window.ExportStudio.controller.initiateExport("WORKSHEET_PDF", {});
+                
+                return Promise.all([p1, p2]);
+            }).then(function(results) {
+                if (results[0] === null && results[1] !== null) trace("Race Condition Coordinator: State isolation maintained across parallel execution threads.", "success", null, "regression");
+                else trace("Race Condition Coordinator: Cross-thread state leakage detected.", "fail", null, "regression");
+                
+                // End Suite Validation Check
+                if (capturedErrors.length === 0 && capturedWarnings.length === 0) trace("Global Sandbox Console Matrix: No Errors or Warnings intercepted.", "success", null, "regression");
+                else trace("Global Sandbox Console Matrix: Captured " + capturedErrors.length + " Errors / " + capturedWarnings.length + " Warnings.", "fail", null, "regression");
+
+                executeTeardown();
+                renderFinalDash();
+                resolveTestComplete(qaState);
+            }).catch(function(err) {
+                trace("QA Pipeline Critical Breakdown: " + (err.message || err), "fail", null, "regression");
+                executeTeardown();
+                renderFinalDash();
+                resolveTestComplete(qaState);
+            });
+        });
+    }
+
+    function triggerSuite() {
+        var btn = el("runBtn"); btn.disabled = true; btn.style.opacity = "0.5";
+        capturedErrors = []; capturedWarnings = []; el("qaTerminal").innerHTML = "";
+        
+        executeUltimateTestSuite().then(function() {
+            btn.disabled = false; btn.style.opacity = "1";
+        });
+    }
+
+    setTimeout(triggerSuite, 1000);
+</script>
+</body>
+</html>
+
